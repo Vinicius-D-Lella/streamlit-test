@@ -87,7 +87,7 @@ tabelaModule = pd.DataFrame(tabelaModule)
 
 select = 11
 
-st.title("Ranking de modulos")
+st.title("Ranking de Módulos")
 tabelaModule = tabelaModule.sort_values(by="totalModuleViews", ascending=False)
 st.dataframe(tabelaModule, column_config={
     "id": None,

@@ -11,9 +11,7 @@ df = pd.DataFrame([
     for item in linha.moduleViewedAt
 ])
 
-
-
 df["Data"] = pd.to_datetime(df["Data"])
 df.set_index("Data", inplace=True)
 
-st.area_chart(df["Views"], use_container_width=True)
+st.area_chart(df["Views"])

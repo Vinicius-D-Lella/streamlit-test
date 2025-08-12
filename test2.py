@@ -4,8 +4,9 @@ import pandas as pd
 pages = {
     "Pages": [
         st.Page("home.py", title="Home"),
-        st.Page("module_views.py", title="Graficos de área"),
-        st.Page("multi_area.py", title="Grafico de área multipla"),
+        st.Page("module_views.py", title="Histórico de views"),
+        st.Page("multi_area.py", title="Comparação de histórico de views"),
+        st.Page("bar_chart.py", title="Comparação entre views de graça ou pagas"),
     ]
 }
 

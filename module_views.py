@@ -1,76 +1,133 @@
+import altair as alt
 import streamlit as st
 import pandas as pd
 from home import tabelaModule
+from datetime import datetime
+from datetime import date
+from streamlit_product_card import product_card
 
+st.title("Análise de Módulo")
 conn = st.connection("sql")
-opcao = st.selectbox("Selecione o modulo", options=tabelaModule.title.values, key="selectModule", index=1)
-
-linha = tabelaModule[tabelaModule["title"] == opcao].iloc[0]
+modulo = st.selectbox("Selecione o módulo", options=tabelaModule.title.values, key="selectModule", index=1)
+linha = tabelaModule[tabelaModule["title"] == modulo].iloc[0]
 
 conteudos = conn.query(f'SELECT "id" FROM public."Content" WHERE "moduleId" = {linha.id};')
+
+initialDate = conn.query(f'''
+                   SELECT 
+                   CAST("createdAt" AT TIME ZONE 'UTC' AT TIME ZONE 'America/Sao_Paulo' AS DATE) AS "createdAt"
+                   FROM public."ContentView"
+                   WHERE "contentId" IN ({','.join(map(str, conteudos.id.values))})''')
+
+
+
+
+today = datetime.now()
+
+start_limit = initialDate.createdAt[0]
+start_date = start_limit
+end_date = today
+end_limit = today
+
+d = st.date_input(
+    "Selecione o período",
+    (start_date, end_date),
+    start_limit,
+    end_limit,
+    format="DD/MM/YYYY",
+)
+
+
+if len(d) == 2:
+    start_date = d[0]
+    end_date = d[1]
 
 raw_dateViews = conn.query(f'''
                    SELECT 
                    "contentId",
                     CASE WHEN "totalViews" > 10 THEN 10 ELSE "totalViews" END AS "totalViews",
-                   "createdAt" AT TIME ZONE 'UTC' AT TIME ZONE 'America/Sao_Paulo' AS "createdAt"
+                   CAST("createdAt" AT TIME ZONE 'UTC' AT TIME ZONE 'America/Sao_Paulo' AS DATE) AS "createdAt"
                    FROM public."ContentView"
                    WHERE "contentId" IN ({','.join(map(str, conteudos.id.values))})
                    AND "totalViews" > 0
+                   AND "createdAt" BETWEEN '{start_date}' AND '{end_date}'
                    ''')
 
-st.write(raw_dateViews)
-
-views = []
 raw_views = raw_dateViews.sort_values(by="createdAt", ascending=True)
 
-for row in raw_views.itertuples():
-    if row.contentId not in [item["contentId"] for item in views]:
-        views.append({
-            "contentId": row.contentId,
-            "totalViews": row.totalViews,
-            "createdAt": [{ str(row.createdAt)[0:10]: row.totalViews }]
-        })
-    else:
-        for item in views:
-            if item["contentId"] == row.contentId:
-                item["totalViews"] += row.totalViews
-                if str(row.createdAt)[0:10] not in [list(d.keys())[0] for d in item["createdAt"]]:
-                    item["createdAt"].append({ str(row.createdAt)[0:10]: row.totalViews })
-                else:
-                    for d in item["createdAt"]:
-                        if list(d.keys())[0] == str(row.createdAt)[0:10]:
-                            d[list(d.keys())[0]] += row.totalViews
+contentViews = raw_views.groupby(["contentId", "createdAt"]).sum().reset_index()
+contentViews = pd.DataFrame(contentViews)
 
-views = pd.DataFrame(views)
-st.write(views)
-tabelaModuleHistory = {}
-for row in views.itertuples():
-    if tabelaModuleHistory == {}:
-        tabelaModuleHistory = {
-        "moduleId": linha.id,
-        "totalViews": row.totalViews,
-        "createdAt": row.createdAt
-        }
-    else:
-        tabelaModuleHistory["totalViews"] += row.totalViews
-        for date in row.createdAt:
-            if str(list(date.keys())[0]) not in [str(d) for d in tabelaModuleHistory["createdAt"]]:
-                tabelaModuleHistory["createdAt"].append(date)
-            else:
-                for d in tabelaModuleHistory["createdAt"]:
-                    print(d)
-
+tabelaModuleHistory = contentViews.groupby("createdAt").sum().reset_index()
 tabelaModuleHistory = pd.DataFrame(tabelaModuleHistory)
-st.write(tabelaModuleHistory)
 
+record = tabelaModuleHistory.sort_values(by="totalViews", ascending=False).iloc[0]
 
-#df = pd.DataFrame([
-#    {"Data": list(item.keys())[0], "Views": list(item.values())[0]}
-#    for item in moduloViews[0]["moduleViewedAt"]
-#])
+Tabela = tabelaModuleHistory.rename(columns={"totalViews": "Views","createdAt": "Data"})
 
-#df["Data"] = pd.to_datetime(df["Data"])
-#df.set_index("Data", inplace=True)
+chart = (
+    alt.Chart(Tabela)
+    .mark_area(
+        color="steelblue",         
+        opacity=0.5,              
+        line={"color": "steelblue"},    
+        point={"color": "steelblue"}     
+    )
+    .encode(
+        x=alt.X("Data:T", title="Data", axis=alt.Axis(format="%d/%m/%y")),
+        y=alt.Y("Views:Q", title="Visualizações"),
+        tooltip=[alt.Tooltip("Data:T", format="%d/%m/%y"), "Views"]
+    )
+    .properties(
+        width=700,
+        height=350
+    )
+)
 
-#st.area_chart(df["Views"])
+st.altair_chart(chart, use_container_width=True)
+
+total_views = Tabela["Views"].sum()
+quantidade_dias = Tabela["Data"].nunique()
+
+st.subheader("Dados do Módulo durante o período")
+
+col1,col2,col3= st.columns(3)
+
+with col1:
+    product_card(
+    product_name="Total de Views",
+    description="",
+    price=total_views,
+    styles={
+        "card":{"height": "150px", "display": "flex", "flex-direction": "column", "justify-content": "space-around", "position": "relative", "align-items": "center"},
+        "title": {"width": "80%", "font-size": "16px", "font-weight": "bold", "text-align": "center","position": "absolute", "top": "10%"},
+        "price": {"font-size": "24px", "font-weight": "bold", "text-align": "center"},
+        }
+)
+    
+with col2:
+    product_card(
+    product_name="Dia com mais views",
+    description=record["createdAt"].strftime("%d/%m/%Y"),
+    price=record["totalViews"],
+    styles={
+        "card":{"height": "150px", "display": "flex", "flex-direction": "column", "justify-content": "space-around", "position": "relative", "align-items": "center"},
+        "title": {"width": "80%", "font-size": "16px", "font-weight": "bold", "text-align": "center","position": "absolute", "top": "10%"},
+        "text": {"font-size": "12px", "font-weight": "bold", "text-align": "center"},
+        "price": {"font-size": "24px", "font-weight": "bold", "text-align": "center"},
+        }
+)
+    
+with col3:
+    product_card(
+    product_name="Media de Views",
+    description="",
+    price= int(total_views / quantidade_dias if quantidade_dias > 0 else 0),
+    styles={
+        "card":{"height": "150px", "display": "flex", "flex-direction": "column", "justify-content": "space-around", "position": "relative", "align-items": "center"},
+        "title": {"width": "80%", "font-size": "16px", "font-weight": "bold", "text-align": "center","position": "absolute", "top": "10%"},
+        "text": {"font-size": "16px", "font-weight": "bold", "text-align": "center"},
+        "price": {"font-size": "24px", "font-weight": "bold", "text-align": "center"},
+        }
+)
+    

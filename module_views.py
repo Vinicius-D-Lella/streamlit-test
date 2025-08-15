@@ -3,12 +3,25 @@ import streamlit as st
 import pandas as pd
 from home import tabelaModule
 from datetime import datetime
-from datetime import date
 from streamlit_product_card import product_card
 
+st.markdown("""
+    <style>
+        /* Centraliza todo o conteúdo */
+        .block-container {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            text-align: center;
+        }
+    </style>
+""", unsafe_allow_html=True)
+
 st.title("Análise de Módulo")
+select_module, select_date = st.columns(2)
 conn = st.connection("sql")
-modulo = st.selectbox("Selecione o módulo", options=tabelaModule.title.values, key="selectModule", index=1)
+with select_module:
+    modulo = st.selectbox("Selecione o módulo", options=tabelaModule.title.values, key="selectModule", index=1)
 linha = tabelaModule[tabelaModule["title"] == modulo].iloc[0]
 
 conteudos = conn.query(f'SELECT "id" FROM public."Content" WHERE "moduleId" = {linha.id};')
@@ -19,9 +32,6 @@ initialDate = conn.query(f'''
                    FROM public."ContentView"
                    WHERE "contentId" IN ({','.join(map(str, conteudos.id.values))})''')
 
-
-
-
 today = datetime.now()
 
 start_limit = initialDate.createdAt[0]
@@ -29,13 +39,14 @@ start_date = start_limit
 end_date = today
 end_limit = today
 
-d = st.date_input(
+with select_date:
+    d = st.date_input(
     "Selecione o período",
     (start_date, end_date),
     start_limit,
     end_limit,
     format="DD/MM/YYYY",
-)
+    )
 
 
 if len(d) == 2:
@@ -45,6 +56,7 @@ if len(d) == 2:
 raw_dateViews = conn.query(f'''
                    SELECT 
                    "contentId",
+                    "watchUntil",
                     CASE WHEN "totalViews" > 10 THEN 10 ELSE "totalViews" END AS "totalViews",
                    CAST("createdAt" AT TIME ZONE 'UTC' AT TIME ZONE 'America/Sao_Paulo' AS DATE) AS "createdAt"
                    FROM public."ContentView"
@@ -53,7 +65,9 @@ raw_dateViews = conn.query(f'''
                    AND "createdAt" BETWEEN '{start_date}' AND '{end_date}'
                    ''')
 
+
 raw_views = raw_dateViews.sort_values(by="createdAt", ascending=True)
+
 
 contentViews = raw_views.groupby(["contentId", "createdAt"]).sum().reset_index()
 contentViews = pd.DataFrame(contentViews)
@@ -62,6 +76,12 @@ tabelaModuleHistory = contentViews.groupby("createdAt").sum().reset_index()
 tabelaModuleHistory = pd.DataFrame(tabelaModuleHistory)
 
 record = tabelaModuleHistory.sort_values(by="totalViews", ascending=False).iloc[0]
+engajamento = 0
+
+for index, row in raw_views.iterrows():
+    engajamento += row["watchUntil"]
+engajamento = engajamento / len(raw_views) if len(raw_views) > 0 else 0
+engajamento = int(engajamento * 100)
 
 Tabela = tabelaModuleHistory.rename(columns={"totalViews": "Views","createdAt": "Data"})
 
@@ -71,7 +91,7 @@ chart = (
         color="steelblue",         
         opacity=0.5,              
         line={"color": "steelblue"},    
-        point={"color": "steelblue"}     
+        point={"size": 0}     
     )
     .encode(
         x=alt.X("Data:T", title="Data", axis=alt.Axis(format="%d/%m/%y")),
@@ -96,11 +116,12 @@ col1,col2,col3= st.columns(3)
 with col1:
     product_card(
     product_name="Total de Views",
-    description="",
+    description=f"Média: {int(total_views / quantidade_dias if quantidade_dias > 0 else 0)}",
     price=total_views,
     styles={
         "card":{"height": "150px", "display": "flex", "flex-direction": "column", "justify-content": "space-around", "position": "relative", "align-items": "center"},
         "title": {"width": "80%", "font-size": "16px", "font-weight": "bold", "text-align": "center","position": "absolute", "top": "10%"},
+        "text": {"font-size": "12px", "font-weight": "bold", "text-align": "center"},
         "price": {"font-size": "24px", "font-weight": "bold", "text-align": "center"},
         }
 )
@@ -120,9 +141,9 @@ with col2:
     
 with col3:
     product_card(
-    product_name="Media de Views",
+    product_name="Engajamento",
     description="",
-    price= int(total_views / quantidade_dias if quantidade_dias > 0 else 0),
+    price=str(engajamento) + "%",
     styles={
         "card":{"height": "150px", "display": "flex", "flex-direction": "column", "justify-content": "space-around", "position": "relative", "align-items": "center"},
         "title": {"width": "80%", "font-size": "16px", "font-weight": "bold", "text-align": "center","position": "absolute", "top": "10%"},

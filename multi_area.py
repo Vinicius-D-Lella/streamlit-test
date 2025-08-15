@@ -1,6 +1,5 @@
-import altair as alt
+
 import streamlit as st
-import pandas as pd
 from home import tabelaModule
 
 conn = st.connection("sql")

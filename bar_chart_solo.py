@@ -18,12 +18,14 @@ st.markdown("""
 
 st.title("Análise de público")
 select_module,select_date = st.columns(2)
-activeContent,activeSpec = st.columns(2)
+activeSpec,activeContent,false_bar,activeUniqueUser = st.columns(4)
+with activeUniqueUser:
+    st.checkbox("Usuário Único", key="uniqueUser", value=False)
 conn = st.connection("sql")
 freeContent = conn.query('SELECT "moduleId","contentId" FROM public."OfferAccess" WHERE "offerId" = 3;')
 subscriptions = conn.query('SELECT "userId" FROM public."Subscription";')
 with select_module:
-    opcao = st.selectbox("Selecione o módulo", options=tabelaModule.title.values, key="selectModule", index=1)
+    opcao = st.selectbox("Selecione o módulo", options=tabelaModule.title.values, key="selectModule", index=0)
 modulo = tabelaModule[tabelaModule["title"] == opcao].iloc[0]
 
 
@@ -44,9 +46,9 @@ initialDate = conn.query(f'''
                    WHERE "contentId" IN ({','.join(map(str, conteudos.id.values))})''')
 
 with activeContent:
-    st.checkbox("Tipo de Conteudo", key="tipoConteudo", value=True)
+    st.checkbox("Tipo de Conteudo", key="tipoConteudo")
 with activeSpec:
-    st.checkbox("Tipo de Espectador", key="tipoEspectador")
+    st.checkbox("Tipo de Espectador", key="tipoEspectador",value=True)
 
 today = datetime.now()
 start_limit = initialDate.createdAt[0]
@@ -82,29 +84,69 @@ raw_dateViews = conn.query(f'''
 
 raw_views = raw_dateViews.sort_values(by="createdAt", ascending=True)
 
+
 contentViews = raw_views.groupby(["contentId", "createdAt"]).sum().reset_index()
 contentViews = pd.DataFrame(contentViews)
 
-if modulo.id in freeContent.moduleId.values:
-    frcView = contentViews.totalViews.sum()
-else:
-    for row in contentViews.itertuples():
-        if row.contentId in freeContent.contentId.values:
-            frcView += row.totalViews
+if st.session_state.uniqueUser:
+    usuario_vendo_conteudo_gratis = []
+    usuario_vendo_conteudo_pago = []
+    for row in raw_views.itertuples():
+        if modulo.id in freeContent.moduleId.values:
+            usuario_vendo_conteudo_gratis.append({"userId": row.userId})
         else:
-            pacView += row.totalViews
+            if row.contentId in freeContent.contentId.values:
+                usuario_vendo_conteudo_gratis.append({"userId": row.userId})
+            else:
+                usuario_vendo_conteudo_pago.append({"userId": row.userId})
 
-for row in raw_views.itertuples():
+
+    usuario_vendo_conteudo_gratis = pd.DataFrame(usuario_vendo_conteudo_gratis)
+    usuario_vendo_conteudo_pago = pd.DataFrame(usuario_vendo_conteudo_pago)
+
+    if not usuario_vendo_conteudo_gratis.empty:
+        usuario_vendo_conteudo_gratis = usuario_vendo_conteudo_gratis.drop_duplicates(subset=["userId"])
+    if not usuario_vendo_conteudo_pago.empty:
+        usuario_vendo_conteudo_pago = usuario_vendo_conteudo_pago.drop_duplicates(subset=["userId"])
+
+
+    if not usuario_vendo_conteudo_gratis.empty:
+        frcView = len(usuario_vendo_conteudo_gratis)
+    if not usuario_vendo_conteudo_pago.empty:
+        pacView = len(usuario_vendo_conteudo_pago)
+
+    if not usuario_vendo_conteudo_gratis.empty:
+        for row in usuario_vendo_conteudo_gratis.itertuples():
+            if row.userId not in subscriptions.userId.values:
+                ufrView += 1
+            else:
+                sfrView += 1
+
+    if not usuario_vendo_conteudo_pago.empty:
+        for row in usuario_vendo_conteudo_pago.itertuples():
+            if row.userId in subscriptions.userId.values:
+                spaView += 1
+else:
     if modulo.id in freeContent.moduleId.values:
-        if row.userId not in subscriptions.userId.values:
-            ufrView += row.totalViews
-        else:
-            sfrView += row.totalViews
+        frcView = contentViews.totalViews.sum()
     else:
-        if row.userId not in subscriptions.userId.values and row.contentId in freeContent.contentId.values: ufrView += row.totalViews
-        elif row.userId in subscriptions.userId.values and row.contentId in freeContent.contentId.values: sfrView += row.totalViews
-        elif row.userId in subscriptions.userId.values and row.contentId not in freeContent.contentId.values: spaView += row.totalViews
-        else: ufrView += row.totalViews
+        for row in contentViews.itertuples():
+            if row.contentId in freeContent.contentId.values:
+                frcView += row.totalViews
+            else:
+                pacView += row.totalViews
+
+    for row in raw_views.itertuples():
+        if modulo.id in freeContent.moduleId.values:
+            if row.userId not in subscriptions.userId.values:
+                ufrView += row.totalViews
+            else:
+                sfrView += row.totalViews
+        else:
+            if row.userId not in subscriptions.userId.values and row.contentId in freeContent.contentId.values: ufrView += row.totalViews
+            elif row.userId in subscriptions.userId.values and row.contentId in freeContent.contentId.values: sfrView += row.totalViews
+            elif row.userId in subscriptions.userId.values and row.contentId not in freeContent.contentId.values: spaView += row.totalViews
+            else: ufrView += row.totalViews
 modulo = pd.DataFrame([modulo])
 
 modulo = modulo.assign(
@@ -152,10 +194,11 @@ dadosViewer.append({
 dc = pd.DataFrame(dadosConteudo)
 dv = pd.DataFrame(dadosViewer)
 if dadosConteudo != []:
-    if st.session_state.tipoConteudo:
-        st.subheader("Gráfico de Barras - Conteúdo")
-        st.bar_chart(dc, x="Módulo", y="Views", color="Conteúdo", stack=False, use_container_width=True)
     if st.session_state.tipoEspectador:
         st.subheader("Gráfico de Barras - Espectador")
         st.bar_chart(dv, x="Módulo", y="Views", color="Tipo de Visualização", stack=False, use_container_width=True)
+    if st.session_state.tipoConteudo:
+        st.subheader("Gráfico de Barras - Conteúdo")
+        st.bar_chart(dc, x="Módulo", y="Views", color="Conteúdo", stack=False, use_container_width=True)
+
 

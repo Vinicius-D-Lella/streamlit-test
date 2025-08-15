@@ -17,14 +17,19 @@ st.markdown("""
     </style>
 """, unsafe_allow_html=True)
 
+if "Total" not in tabelaModule.title.values:
+    tabelaModule.loc[len(tabelaModule)] = [1000000000,"Total",1]
+conn = st.connection("sql")
 st.title("Análise de Módulo")
 select_module, select_date = st.columns(2)
-conn = st.connection("sql")
 with select_module:
     modulo = st.selectbox("Selecione o módulo", options=tabelaModule.title.values, key="selectModule", index=1)
 linha = tabelaModule[tabelaModule["title"] == modulo].iloc[0]
 
-conteudos = conn.query(f'SELECT "id" FROM public."Content" WHERE "moduleId" = {linha.id};')
+if modulo != "Total":
+    conteudos = conn.query(f'SELECT "id" FROM public."Content" WHERE "moduleId" = {linha.id};')
+else:
+    conteudos = conn.query(f'SELECT "id" FROM public."Content" WHERE "moduleId" = 14;')
 
 initialDate = conn.query(f'''
                    SELECT 
@@ -53,6 +58,8 @@ if len(d) == 2:
     start_date = d[0]
     end_date = d[1]
 
+
+
 raw_dateViews = conn.query(f'''
                    SELECT 
                    "contentId",
@@ -65,9 +72,20 @@ raw_dateViews = conn.query(f'''
                    AND "createdAt" BETWEEN '{start_date}' AND '{end_date}'
                    ''')
 
-
-raw_views = raw_dateViews.sort_values(by="createdAt", ascending=True)
-
+if modulo == "Total":
+    full_raw_dateViews = conn.query(f'''
+                   SELECT 
+                   "contentId",
+                    "watchUntil",
+                    CASE WHEN "totalViews" > 10 THEN 10 ELSE "totalViews" END AS "totalViews",
+                   CAST("createdAt" AT TIME ZONE 'UTC' AT TIME ZONE 'America/Sao_Paulo' AS DATE) AS "createdAt"
+                   FROM public."ContentView"
+                   WHERE "totalViews" > 0
+                   AND "createdAt" BETWEEN '{start_date}' AND '{end_date}'
+                   ''')
+    raw_views = full_raw_dateViews.sort_values(by="createdAt", ascending=True)
+else:
+    raw_views = raw_dateViews.sort_values(by="createdAt", ascending=True)
 
 contentViews = raw_views.groupby(["contentId", "createdAt"]).sum().reset_index()
 contentViews = pd.DataFrame(contentViews)
@@ -109,7 +127,7 @@ st.altair_chart(chart, use_container_width=True)
 total_views = Tabela["Views"].sum()
 quantidade_dias = Tabela["Data"].nunique()
 
-st.subheader("Dados do Módulo durante o período")
+st.subheader(f"Dados {'' if modulo == 'Total' else 'do Módulo '} durante o período")
 
 col1,col2,col3= st.columns(3)
 

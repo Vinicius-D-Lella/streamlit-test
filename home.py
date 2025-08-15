@@ -1,7 +1,6 @@
 import altair as alt
 import streamlit as st
 import pandas as pd
-from home import tabelaModule
 from datetime import date, datetime, time, timedelta
 from streamlit_product_card import product_card
 import pytz

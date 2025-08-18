@@ -5,6 +5,7 @@ from datetime import date, datetime, time, timedelta
 from streamlit_product_card import product_card
 import pytz
 
+
 st.markdown("""
     <style>
         /* Centraliza todo o conteúdo */

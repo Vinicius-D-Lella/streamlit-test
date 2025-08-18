@@ -41,13 +41,3 @@ st.dataframe(tabelaModule, column_config={
     hide_index=True,
 )
     
-st.title("Ranking de Conteúdos")
-tabelaContent = tabelaContent.sort_values(by="views", ascending=False)
-st.dataframe(tabelaContent, column_config={
-    "id": None,
-    "title": "Nome do Conteúdo",
-    "views": "Total de Views",
-
-},
-    hide_index=True,
-)

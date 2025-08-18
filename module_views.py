@@ -2,7 +2,7 @@ import altair as alt
 import streamlit as st
 import pandas as pd
 from home import tabelaModule
-from datetime import datetime
+from datetime import date, datetime
 from streamlit_product_card import product_card
 
 st.markdown("""
@@ -39,7 +39,10 @@ initialDate = conn.query(f'''
 
 today = datetime.now()
 
-start_limit = initialDate.createdAt[0]
+if initialDate.createdAt[0] < date(2025,5,12):
+    start_limit = date(2025,5,12)
+else:
+    start_limit = initialDate.createdAt[0]
 start_date = start_limit
 end_date = today
 end_limit = today

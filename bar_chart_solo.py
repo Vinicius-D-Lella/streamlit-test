@@ -1,7 +1,7 @@
 import altair as alt
 import streamlit as st
 import pandas as pd
-from datetime import datetime
+from datetime import date, datetime
 from home import tabelaModule
 
 st.markdown("""
@@ -51,7 +51,10 @@ with activeSpec:
     st.checkbox("Tipo de Espectador", key="tipoEspectador",value=True)
 
 today = datetime.now()
-start_limit = initialDate.createdAt[0]
+if initialDate.createdAt[0] < date(2025,5,12):
+    start_limit = date(2025,5,12)
+else:
+    start_limit = initialDate.createdAt[0]
 start_date = start_limit
 end_date = today
 end_limit = today
